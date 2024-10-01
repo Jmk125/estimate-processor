@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import pandas as pd
 import os
-from fuzzywuzzy import fuzz, process  # For fuzzy string matching
+from fuzzywuzzy import fuzz
 
 app = Flask(__name__)
 
@@ -31,58 +31,37 @@ def upload_file():
 
     return jsonify(results)
 
-# Function to dynamically detect the correct sheet and columns, then search for the item
+# Function to search the entire spreadsheet for fuzzy matches to the search term
 def process_excel(file_path, search_term):
     try:
         # Read the Excel file with all sheets
         xls = pd.ExcelFile(file_path)
 
-        # Find the sheet that contains 'Detail' in its name
-        detail_sheet_name = None
+        # Iterate over each sheet in the Excel file
+        all_matches = []
         for sheet_name in xls.sheet_names:
-            if 'Detail' in sheet_name:
-                detail_sheet_name = sheet_name
-                break
-        
-        if not detail_sheet_name:
-            return {'status': 'error', 'message': 'No sheet containing "Detail" found'}
+            df = pd.read_excel(file_path, sheet_name=sheet_name)
+            # Convert all cells to strings for consistent processing
+            df = df.astype(str)
 
-        # Try to load the detail sheet, skipping initial rows to locate the column headers
-        for skiprows in range(0, 10):  # Try skipping between 0 to 10 rows
-            df = pd.read_excel(file_path, sheet_name=detail_sheet_name, skiprows=skiprows)
-            if 'Unnamed' not in df.columns[0]:  # Check if we have usable columns
-                break
+            # Iterate over all rows and cells to find fuzzy matches
+            for idx, row in df.iterrows():
+                for col_name, cell_value in row.items():
+                    if fuzz.partial_ratio(str(cell_value), search_term) > 70:
+                        # Store the entire row if we find a fuzzy match
+                        match_info = {
+                            'Sheet': sheet_name,
+                            'Row': idx + 1,  # Excel rows are 1-indexed
+                            'Matched Cell': col_name,
+                            'Matched Value': cell_value,
+                            'Row Data': row.to_dict()  # Return entire row for context
+                        }
+                        all_matches.append(match_info)
 
-        # Fallback to positional columns if necessary
-        if 'Unnamed' in df.columns[0] or df.empty:
-            # If no valid column names are found, fallback to column index-based processing
-            df = pd.read_excel(file_path, sheet_name=detail_sheet_name, skiprows=10, header=None)
-            # Assuming Column C = Items, D = Quantity, E = Unit, F = Unit Cost, G = Total Cost
-            df = df.iloc[:, [2, 3, 4, 5, 6]]  # Only keep columns C, D, E, F, G
-            df.columns = ['Item', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']
-
-        # Now, perform a fuzzy search on the "Item" column (or assumed column C)
-        filtered_rows = df[df['Item'].apply(lambda x: fuzz.partial_ratio(str(x), search_term) > 70)]
-
-        if filtered_rows.empty:
+        if not all_matches:
             return {'status': 'success', 'message': 'No matching item found'}
 
-        # Build the results to return
-        results = []
-        for _, row in filtered_rows.iterrows():
-            item_info = {
-                'Item': row.get('Item', 'N/A'),
-                'Unit': row.get('Unit', 'N/A'),
-                'Quantity': row.get('Quantity', 'N/A'),
-                'Unit Cost': row.get('Unit Cost', 'N/A'),
-                'Total Cost': row.get('Total Cost', 'N/A')
-            }
-            results.append(item_info)
-
-        # Delete the file after processing
-        os.remove(file_path)
-
-        return {'status': 'success', 'items': results}
+        return {'status': 'success', 'matches': all_matches}
 
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
