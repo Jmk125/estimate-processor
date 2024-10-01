@@ -50,6 +50,9 @@ def process_excel(file_path, search_term):
         # Load the detail sheet into a dataframe
         df = pd.read_excel(file_path, sheet_name=detail_sheet_name)
 
+        # Debug: Print available columns to help identify the issue
+        print("Available columns:", df.columns.tolist())
+
         # Try to detect relevant columns dynamically
         # Expected columns based on user's description
         expected_columns = {
@@ -68,6 +71,9 @@ def process_excel(file_path, search_term):
             best_match = process.extractOne(expected_col_names[0], actual_columns, scorer=fuzz.token_sort_ratio)
             if best_match and best_match[1] > 70:  # Match confidence > 70%
                 column_mapping[key] = best_match[0]
+
+        # Debug: Print the column mapping for review
+        print("Column mapping:", column_mapping)
 
         # Check if we found the required columns
         if 'Item' not in column_mapping:
