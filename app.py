@@ -53,13 +53,15 @@ def process_excel(file_path, search_term):
             if 'Unnamed' not in df.columns[0]:  # Check if we have usable columns
                 break
 
-        # Debug: If no valid columns are found, fallback to defaults
-        if df.empty or 'Unnamed' in df.columns[0]:
-            # If we fail to detect columns, assume a default column structure
+        # Fallback to positional columns if necessary
+        if 'Unnamed' in df.columns[0] or df.empty:
+            # If no valid column names are found, fallback to column index-based processing
             df = pd.read_excel(file_path, sheet_name=detail_sheet_name, skiprows=10, header=None)
-            df.columns = ['Project Metadata', 'Ignore', 'Item', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']
+            # Assuming Column C = Items, D = Quantity, E = Unit, F = Unit Cost, G = Total Cost
+            df = df.iloc[:, [2, 3, 4, 5, 6]]  # Only keep columns C, D, E, F, G
+            df.columns = ['Item', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']
 
-        # Now, perform a fuzzy search on the "Item" column (or column C)
+        # Now, perform a fuzzy search on the "Item" column (or assumed column C)
         filtered_rows = df[df['Item'].apply(lambda x: fuzz.partial_ratio(str(x), search_term) > 70)]
 
         if filtered_rows.empty:
