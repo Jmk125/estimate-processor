@@ -47,41 +47,20 @@ def process_excel(file_path, search_term):
         if not detail_sheet_name:
             return {'status': 'error', 'message': 'No sheet containing "Detail" found'}
 
-        # Load the detail sheet into a dataframe
-        df = pd.read_excel(file_path, sheet_name=detail_sheet_name)
+        # Try to load the detail sheet, skipping initial rows to locate the column headers
+        for skiprows in range(0, 10):  # Try skipping between 0 to 10 rows
+            df = pd.read_excel(file_path, sheet_name=detail_sheet_name, skiprows=skiprows)
+            if 'Unnamed' not in df.columns[0]:  # Check if we have usable columns
+                break
 
-        # Debug: Print available columns to help identify the issue
-        print("Available columns:", df.columns.tolist())
+        # Debug: If no valid columns are found, fallback to defaults
+        if df.empty or 'Unnamed' in df.columns[0]:
+            # If we fail to detect columns, assume a default column structure
+            df = pd.read_excel(file_path, sheet_name=detail_sheet_name, skiprows=10, header=None)
+            df.columns = ['Project Metadata', 'Ignore', 'Item', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']
 
-        # Try to detect relevant columns dynamically
-        # Expected columns based on user's description
-        expected_columns = {
-            'Item': ['Item', 'Description'],  # Items are typically in column C, with names like "Item" or "Description"
-            'Quantity': ['Quantity'],         # Quantities in column D
-            'Unit': ['Unit'],                 # Units in column E
-            'Unit Cost': ['Unit Cost'],       # Unit cost in column F
-            'Total Cost': ['Total Cost']      # Total cost in column G
-        }
-
-        # Map the actual columns from the file to the expected columns
-        column_mapping = {}
-        actual_columns = df.columns
-
-        for key, expected_col_names in expected_columns.items():
-            best_match = process.extractOne(expected_col_names[0], actual_columns, scorer=fuzz.token_sort_ratio)
-            if best_match and best_match[1] > 70:  # Match confidence > 70%
-                column_mapping[key] = best_match[0]
-
-        # Debug: Print the column mapping for review
-        print("Column mapping:", column_mapping)
-
-        # Check if we found the required columns
-        if 'Item' not in column_mapping:
-            return {'status': 'error', 'message': 'No recognizable item column found in the Excel file'}
-
-        # Search for the term in the 'Item' column
-        search_column = column_mapping['Item']
-        filtered_rows = df[df[search_column].apply(lambda x: fuzz.partial_ratio(str(x), search_term) > 70)]
+        # Now, perform a fuzzy search on the "Item" column (or column C)
+        filtered_rows = df[df['Item'].apply(lambda x: fuzz.partial_ratio(str(x), search_term) > 70)]
 
         if filtered_rows.empty:
             return {'status': 'success', 'message': 'No matching item found'}
@@ -90,11 +69,11 @@ def process_excel(file_path, search_term):
         results = []
         for _, row in filtered_rows.iterrows():
             item_info = {
-                'Item': row.get(column_mapping.get('Item', 'N/A'), 'N/A'),
-                'Unit': row.get(column_mapping.get('Unit', 'N/A')),
-                'Quantity': row.get(column_mapping.get('Quantity', 'N/A')),
-                'Unit Cost': row.get(column_mapping.get('Unit Cost', 'N/A')),
-                'Total Cost': row.get(column_mapping.get('Total Cost', 'N/A'))
+                'Item': row.get('Item', 'N/A'),
+                'Unit': row.get('Unit', 'N/A'),
+                'Quantity': row.get('Quantity', 'N/A'),
+                'Unit Cost': row.get('Unit Cost', 'N/A'),
+                'Total Cost': row.get('Total Cost', 'N/A')
             }
             results.append(item_info)
 
