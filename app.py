@@ -31,30 +31,51 @@ def upload_file():
 
     return jsonify(results)
 
-# Function to dynamically detect column names and search for the item
+# Function to dynamically detect the correct sheet and columns, then search for the item
 def process_excel(file_path, search_term):
     try:
-        # Read the Excel file using pandas
-        df = pd.read_excel(file_path)
+        # Read the Excel file with all sheets
+        xls = pd.ExcelFile(file_path)
+
+        # Find the sheet that contains 'Detail' in its name
+        detail_sheet_name = None
+        for sheet_name in xls.sheet_names:
+            if 'Detail' in sheet_name:
+                detail_sheet_name = sheet_name
+                break
+        
+        if not detail_sheet_name:
+            return {'status': 'error', 'message': 'No sheet containing "Detail" found'}
+
+        # Load the detail sheet into a dataframe
+        df = pd.read_excel(file_path, sheet_name=detail_sheet_name)
 
         # Try to detect relevant columns dynamically
-        expected_columns = ['Item', 'Description', 'Unit', 'Quantity', 'Unit Cost', 'Total Cost']
+        # Expected columns based on user's description
+        expected_columns = {
+            'Item': ['Item', 'Description'],  # Items are typically in column C, with names like "Item" or "Description"
+            'Quantity': ['Quantity'],         # Quantities in column D
+            'Unit': ['Unit'],                 # Units in column E
+            'Unit Cost': ['Unit Cost'],       # Unit cost in column F
+            'Total Cost': ['Total Cost']      # Total cost in column G
+        }
+
+        # Map the actual columns from the file to the expected columns
+        column_mapping = {}
         actual_columns = df.columns
 
-        # Find the best match for each expected column
-        column_mapping = {}
-        for expected_col in expected_columns:
-            best_match = process.extractOne(expected_col, actual_columns, scorer=fuzz.token_sort_ratio)
+        for key, expected_col_names in expected_columns.items():
+            best_match = process.extractOne(expected_col_names[0], actual_columns, scorer=fuzz.token_sort_ratio)
             if best_match and best_match[1] > 70:  # Match confidence > 70%
-                column_mapping[expected_col] = best_match[0]
-        
-        # Ensure we have the necessary columns for the search
-        if 'Item' not in column_mapping and 'Description' not in column_mapping:
+                column_mapping[key] = best_match[0]
+
+        # Check if we found the required columns
+        if 'Item' not in column_mapping:
             return {'status': 'error', 'message': 'No recognizable item column found in the Excel file'}
 
-        # Search for the term in the 'Item' or 'Description' column
-        search_column = column_mapping.get('Item', column_mapping.get('Description'))
-        filtered_rows = df[df[search_column].apply(lambda x: fuzz.partial_ratio(x, search_term) > 70)]
+        # Search for the term in the 'Item' column
+        search_column = column_mapping['Item']
+        filtered_rows = df[df[search_column].apply(lambda x: fuzz.partial_ratio(str(x), search_term) > 70)]
 
         if filtered_rows.empty:
             return {'status': 'success', 'message': 'No matching item found'}
@@ -63,7 +84,7 @@ def process_excel(file_path, search_term):
         results = []
         for _, row in filtered_rows.iterrows():
             item_info = {
-                'Item': row.get(column_mapping.get('Item', column_mapping.get('Description')), 'N/A'),
+                'Item': row.get(column_mapping.get('Item', 'N/A'), 'N/A'),
                 'Unit': row.get(column_mapping.get('Unit', 'N/A')),
                 'Quantity': row.get(column_mapping.get('Quantity', 'N/A')),
                 'Unit Cost': row.get(column_mapping.get('Unit Cost', 'N/A')),
