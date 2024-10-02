@@ -115,8 +115,15 @@ def train():
 
 # Load the fine-tuned model
 def load_fine_tuned_model():
-    model_name = os.path.join(os.getcwd(), "fine_tuned_model")
-    return pipeline("question-answering", model=model_name, tokenizer=model_name)
+    # Ensure the model directory exists
+    model_dir = os.path.join(os.getcwd(), "fine_tuned_model")
+    
+    # Check if the directory exists before loading the model
+    if not os.path.exists(model_dir):
+        raise OSError(f"Model directory {model_dir} not found. Ensure the model has been trained and saved.")
+
+    # Load the fine-tuned model and tokenizer from the directory
+    return pipeline("question-answering", model=model_dir, tokenizer=model_dir)
 
 # Route for handling user queries
 @app.route("/ask", methods=["POST"])
