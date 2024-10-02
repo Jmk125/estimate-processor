@@ -88,8 +88,16 @@ def fine_tune_model(train_data):
     trainer.train()
 
     # Save the fine-tuned model to a directory
-    model.save_pretrained('./fine_tuned_model')
-    tokenizer.save_pretrained('./fine_tuned_model')
+    model_dir = './fine_tuned_model'
+    model.save_pretrained(model_dir)
+    tokenizer.save_pretrained(model_dir)
+
+    # Log model save status
+    if os.path.exists(model_dir):
+        print(f"Model saved successfully at {model_dir}")
+        print(f"Files in {model_dir}: {os.listdir(model_dir)}")  # List files in the directory
+    else:
+        print(f"Failed to save model at {model_dir}")
 
 # Route to train the model using the files in the server_path
 @app.route("/train", methods=["POST"])
@@ -115,13 +123,16 @@ def train():
 
 # Load the fine-tuned model
 def load_fine_tuned_model():
-    # Ensure the model directory exists
     model_dir = os.path.join(os.getcwd(), "fine_tuned_model")
     
     # Check if the directory exists before loading the model
     if not os.path.exists(model_dir):
+        print(f"Model directory {model_dir} not found.")
         raise OSError(f"Model directory {model_dir} not found. Ensure the model has been trained and saved.")
 
+    # Log the contents of the directory before loading
+    print(f"Loading model from {model_dir}. Contents: {os.listdir(model_dir)}")
+    
     # Load the fine-tuned model and tokenizer from the directory
     return pipeline("question-answering", model=model_dir, tokenizer=model_dir)
 
