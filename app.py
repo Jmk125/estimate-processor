@@ -125,7 +125,16 @@ def ask_question():
         data = request.json
         question = data.get('question')
 
-        # Load the fine-tuned model
+        # If the user types "train", trigger the training process
+        if question.lower() == "train":
+            # Trigger the training process
+            server_path = r"Z:\CM PRECON PROJECTS\Schools"
+            files = get_files_from_server(server_path)
+            train_data = prepare_data_for_training(files)
+            fine_tune_model(train_data)
+            return jsonify({"message": "Model is being fine-tuned!"})
+
+        # Otherwise, treat it as a question for the model to answer
         qa_pipeline = load_fine_tuned_model()
 
         # Extract content from files and create a large context (PDFs, Excel, etc.)
